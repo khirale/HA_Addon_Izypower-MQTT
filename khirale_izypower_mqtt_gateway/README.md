@@ -1,4 +1,4 @@
-# Khirale IzyPower MQTT Gateway
+# Khirale Izpower MQTT Gateway
 
 Passerelle locale Khirale : elle conserve les messages MQTT bruts pour le cloud et publie une copie lisible et normalisée sous `khirale/decoded/<SN>/<famille>`.
 

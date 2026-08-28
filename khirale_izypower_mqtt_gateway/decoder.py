@@ -209,6 +209,13 @@ def classify_up(topic, payload):
     parts = topic.lstrip("/").split("/")
     if len(parts) >= 4 and parts[0] == "iot":
         sn, family = parts[2], parts[3]
+        if family == "will" and sn == "%s":
+            try:
+                will_parts = payload.decode("utf-8").strip().split("/")
+                if len(will_parts) == 2:
+                    sn = will_parts[1].upper()
+            except UnicodeDecodeError:
+                pass
     elif len(parts) >= 4 and parts[0:2] == ["Cot", "izy"]:
         sn, family = parts[2], parts[3]
     elif len(parts) >= 3 and parts[0:2] == ["vaysunic", "vysc"]:
