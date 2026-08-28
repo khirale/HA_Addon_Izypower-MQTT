@@ -341,6 +341,14 @@ def on_vps_connect(client, userdata, flags, rc):
     flush_queue()
 
 
+def on_vps_disconnect(client, userdata, rc):
+    reason = mqtt.error_string(rc)
+    if rc == mqtt.MQTT_ERR_SUCCESS:
+        logging.info("Déconnecté du VPS proprement rc=%s raison=%s", rc, reason)
+    else:
+        logging.warning("Connexion VPS perdue rc=%s raison=%s", rc, reason)
+
+
 def on_vps_message(client, userdata, message):
     prefix = f"sites/{SITE}/down/"
     if not message.topic.startswith(prefix):
@@ -353,9 +361,9 @@ def on_vps_message(client, userdata, message):
     elif len(parts) >= 4 and parts[0:2] == ["Cot", "izy"]:
         sn = parts[2]
         family = parts[3]
-    elif len(parts) >= 4 and parts[0:2] == ["vaysunic", "vysc"]:
+    elif len(parts) >= 3 and parts[0:2] == ["vaysunic", "vysc"]:
         family = parts[2]
-        sn = parts[3]
+        sn = parts[3] if len(parts) >= 4 else json_sn(message.payload)
         target = "/" + target.lstrip("/")
     else:
         logging.warning("Topic descendant inconnu rejeté : %s", target)
@@ -390,6 +398,7 @@ vps.tls_insecure_set(False)
 vps.will_set(GATEWAY_STATUS_TOPIC, b"0", qos=1, retain=True)
 vps.on_connect = on_vps_connect
 vps.on_message = on_vps_message
+vps.on_disconnect = on_vps_disconnect
 vps.reconnect_delay_set(1, 60)
 
 
