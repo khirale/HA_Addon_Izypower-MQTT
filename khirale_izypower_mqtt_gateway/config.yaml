@@ -1,6 +1,6 @@
 name: "Khirale Izpower MQTT Gateway"
 version: "0.2.14"
-slug: "khirale_izypwoer_mqtt_gateway"
+slug: "khirale_izypower_mqtt_gateway"
 description: "Permet la communication MQTT des équipements Izypower"
 startup: services
 boot: auto
