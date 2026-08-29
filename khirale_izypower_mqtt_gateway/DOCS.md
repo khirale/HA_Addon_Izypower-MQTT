@@ -10,6 +10,7 @@ L'add-on relie le broker MQTT local de Home Assistant au VPS Khirale. Il :
 - relaie les familles MQTT autorisées vers le VPS ;
 - reçoit les flux descendants destinés au site ;
 - gère les commandes locales Home Assistant et leurs accusés de réception ;
+- transforme périodiquement en `sensor` les réponses `refresh` initiées depuis HA, sans modifier leur payload ;
 - publie son état de connexion au VPS.
 
 ## Configuration
@@ -36,7 +37,7 @@ mqtt_username: utilisateur_local
 mqtt_password: mot_de_passe_local
 site_code: site01
 allowed_serials:
-  - "9801000032BB"
+  - "4564156AZEAZ"
 vps_host: mqtt.khirale.fr
 vps_port: 8883
 vps_username: ha_site01

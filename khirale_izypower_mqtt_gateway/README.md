@@ -1,4 +1,4 @@
-# Khirale IzyPower MQTT Gateway
+# Khirale Izpower MQTT Gateway
 
 Passerelle locale Khirale : elle conserve les messages MQTT bruts pour le cloud et publie une copie lisible et normalisée sous `khirale/decoded/<SN>/<famille>`.
 
@@ -32,10 +32,11 @@ Commande locale Home Assistant :
 - payload JSON clair : `{"cmd":"refresh","device":"Meter","type":"alone","sn":"<SN>","uid":123456}`
 
 La passerelle détecte automatiquement les réponses legacy ou ENC1 afin de publier
-leur copie locale en clair. Un refresh lancé depuis HA reste disponible localement
-en continu mais n'est envoyé au VPS qu'une fois toutes les 180 secondes. Une
+leur copie locale en clair. Lors d'un refresh lancé depuis HA, aucun topic
+`refresh` n'est envoyé au VPS. Une fois toutes les 185 secondes, le payload brut
+reçu est envoyé sans aucune modification sur le topic `sensor` équivalent. Une
 commande refresh descendante du cloud ouvre une fenêtre de 125 secondes durant
-laquelle tous les messages refresh sont transmis.
+laquelle tous les messages `refresh` sont transmis normalement.
 
 Chaque commande lancée depuis HA est mémorisée pendant cinq minutes à partir de
 son `SN`, de son `cmd` et de son `uid`. Tout `cmdack` correspondant est conservé

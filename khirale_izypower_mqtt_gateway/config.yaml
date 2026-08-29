@@ -1,8 +1,7 @@
-name: "Khirale IzyPower MQTT Gateway"
-version: "0.2.13"
+name: "Khirale Izpower MQTT Gateway"
+version: "0.2.17"
 slug: "khirale_izypower_mqtt_gateway"
-description: "Passerelle MQTT locale sécurisée pour les équipements IzyPower"
-url: "https://github.com/khirale/HA_Addon_Izypower-MQTT/tree/main/khirale_izypower_mqtt_gateway"
+description: "Permet la communication MQTT des équipements Izypower"
 startup: services
 boot: auto
 init: false

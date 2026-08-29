@@ -30,8 +30,8 @@ UP_FAMILIES = {"connect", "time", "sensor", "refresh", "warn", "cmdack", "will"}
 CONTROL_PREFIX = "khirale/control"
 PROTOCOLS_FILE = Path("/data/device_protocols.json")
 HA_REFRESH_STATE_FILE = Path("/data/ha_refresh_state.json")
-HA_REFRESH_WINDOW = 180
-REFRESH_FORWARD_INTERVAL = 180
+HA_REFRESH_WINDOW = 240
+HA_SENSOR_FORWARD_INTERVAL = 185
 CLOUD_REFRESH_WINDOW = 125
 HA_COMMAND_ACK_WINDOW = 300
 GATEWAY_STATUS_TOPIC = f"sites/{SITE}/up/status/gateway"
@@ -49,7 +49,7 @@ state_lock = threading.Lock()
 device_protocols = {}
 ha_refresh_until = {}
 cloud_refresh_until = {}
-last_refresh_forwarded = {}
+last_ha_sensor_forwarded = {}
 local_command_echoes = {}
 pending_ha_commands = {}
 
@@ -209,6 +209,13 @@ def classify_up(topic, payload):
     parts = topic.lstrip("/").split("/")
     if len(parts) >= 4 and parts[0] == "iot":
         sn, family = parts[2], parts[3]
+        if family == "will" and sn == "%s":
+            try:
+                will_parts = payload.decode("utf-8").strip().split("/")
+                if len(will_parts) == 2:
+                    sn = will_parts[1].upper()
+            except UnicodeDecodeError:
+                pass
     elif len(parts) >= 4 and parts[0:2] == ["Cot", "izy"]:
         sn, family = parts[2], parts[3]
     elif len(parts) >= 3 and parts[0:2] == ["vaysunic", "vysc"]:
@@ -225,6 +232,24 @@ def classify_up(topic, payload):
     if family not in UP_FAMILIES or sn not in ALLOWED_SERIALS:
         return None, None
     return sn, family
+
+
+def refresh_to_sensor_topic(topic):
+    """Remplace uniquement la famille MQTT, sans toucher au payload."""
+    leading_slash = topic.startswith("/")
+    parts = topic.lstrip("/").split("/")
+    if len(parts) >= 4 and (parts[0] == "iot" or parts[0:2] == ["Cot", "izy"]):
+        if parts[3] != "refresh":
+            return None
+        parts[3] = "sensor"
+    elif len(parts) >= 3 and parts[0:2] == ["vaysunic", "vysc"]:
+        if parts[2] != "refresh":
+            return None
+        parts[2] = "sensor"
+    else:
+        return None
+    converted = "/".join(parts)
+    return "/" + converted if leading_slash else converted
 
 
 def publish_or_queue(topic, payload):
@@ -315,11 +340,26 @@ def on_local_message(client, userdata, message):
         with state_lock:
             cloud_active = now < cloud_refresh_until.get(sn, 0)
             ha_active = now < ha_refresh_until.get(sn, 0)
-            last_sent = last_refresh_forwarded.get(sn, 0)
-            if not cloud_active and ha_active and now - last_sent < REFRESH_FORWARD_INTERVAL:
-                logging.info("Refresh HA limité vers le cloud sn=%s", sn)
+            last_sent = last_ha_sensor_forwarded.get(sn, 0)
+        if not cloud_active and ha_active:
+            if now - last_sent < HA_SENSOR_FORWARD_INTERVAL:
+                logging.info("Refresh HA bloqué vers le cloud sn=%s", sn)
                 return
-            last_refresh_forwarded[sn] = now
+            sensor_payload = decoded_json(message.payload)
+            if (not isinstance(sensor_payload, dict)
+                    or str(sensor_payload.get("sn", "")).upper() != sn
+                    or not isinstance(sensor_payload.get("data"), list)):
+                logging.error("Payload refresh incompatible avec sensor sn=%s", sn)
+                return
+            sensor_topic = refresh_to_sensor_topic(message.topic)
+            if sensor_topic is None:
+                logging.error("Conversion refresh vers sensor impossible sn=%s topic=%s", sn, message.topic)
+                return
+            with state_lock:
+                last_ha_sensor_forwarded[sn] = now
+            publish_or_queue(f"sites/{SITE}/up/{sensor_topic.lstrip('/')}", message.payload)
+            logging.info("Refresh HA converti en sensor vers le cloud sn=%s", sn)
+            return
     publish_or_queue(f"sites/{SITE}/up/{message.topic.lstrip('/')}", message.payload)
     logging.info("Message montant accepté famille=%s sn=%s", family, sn)
 
@@ -334,6 +374,14 @@ def on_vps_connect(client, userdata, flags, rc):
     flush_queue()
 
 
+def on_vps_disconnect(client, userdata, rc):
+    reason = mqtt.error_string(rc)
+    if rc == mqtt.MQTT_ERR_SUCCESS:
+        logging.info("Déconnecté du VPS proprement rc=%s raison=%s", rc, reason)
+    else:
+        logging.warning("Connexion VPS perdue rc=%s raison=%s", rc, reason)
+
+
 def on_vps_message(client, userdata, message):
     prefix = f"sites/{SITE}/down/"
     if not message.topic.startswith(prefix):
@@ -346,9 +394,9 @@ def on_vps_message(client, userdata, message):
     elif len(parts) >= 4 and parts[0:2] == ["Cot", "izy"]:
         sn = parts[2]
         family = parts[3]
-    elif len(parts) >= 4 and parts[0:2] == ["vaysunic", "vysc"]:
+    elif len(parts) >= 3 and parts[0:2] == ["vaysunic", "vysc"]:
         family = parts[2]
-        sn = parts[3]
+        sn = parts[3] if len(parts) >= 4 else json_sn(message.payload)
         target = "/" + target.lstrip("/")
     else:
         logging.warning("Topic descendant inconnu rejeté : %s", target)
@@ -383,6 +431,7 @@ vps.tls_insecure_set(False)
 vps.will_set(GATEWAY_STATUS_TOPIC, b"0", qos=1, retain=True)
 vps.on_connect = on_vps_connect
 vps.on_message = on_vps_message
+vps.on_disconnect = on_vps_disconnect
 vps.reconnect_delay_set(1, 60)
 
 
